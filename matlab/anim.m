@@ -1,7 +1,7 @@
-function M = anim (local_home_dir,run_name,tmin,tmax, ...
+function M = anim (local_home_dir,run_name,t_start,t_end, ...
             field,contours,show_tracers,show_velocity,show_topog)
 %%%
-%%% USAGE: anim (local_home_dir, run_name, tmin, tmax, field, contours, show_tracers, show_velocity, show_topog)
+%%% USAGE: anim (local_home_dir, run_name, t_start, t_end, field, contours, show_tracers, show_velocity, show_topog)
 %%%
 %%% Creates an animation of the 'QGChannel' simulation output.
 %%%
@@ -11,8 +11,8 @@ function M = anim (local_home_dir,run_name,tmin,tmax, ...
 %%%                  then this parameter should be '/Desktop/runs/'.
 %%% run_name - Name of simulation directory, e.g. in previous example, this
 %%%            would be 'test_run'.
-%%% tmin - Simulation time (in seconds) at which to start the movie.
-%%% tmax - Simulation time (in seconds) at which to end the movie.
+%%% t_start - Simulation time (in seconds) at which to start the movie.
+%%% t_end - Simulation time (in seconds) at which to end the movie.
 %%% field - Selects what to plot. Options are 
 %%%                'zeta' (relative vorticity)
 %%%                'pv' (potential vorticity)
@@ -29,16 +29,13 @@ function M = anim (local_home_dir,run_name,tmin,tmax, ...
 %%%              the top and bottom of the continental slope
 %%%
 
-  %%% Load common functions
-  addpath ../matlab_common;
-  
   %%% Load model parameters
   loadParams;
  
   %%% Plotting options
   scrsz = get(0,'ScreenSize');
   fontsize = 22;
-  plotloc = [0.13 0.07 0.8 0.87];
+  plotloc = [0.07 0.07 0.88 0.87];
   framepos = [scrsz(3)/4 0 scrsz(4) scrsz(4)];
 
   %%% Make a movie of the data
@@ -53,7 +50,7 @@ function M = anim (local_home_dir,run_name,tmin,tmax, ...
     
     %%% Current simulation time
     t = n*dt_s;    
-    if ((tmin >= 0 && t < tmin) || (t > tmax))
+    if ((t_start > 0 && t < t_start) || ((t_end>0) && (t > t_end)))
       continue;
     end        
     
@@ -64,14 +61,18 @@ function M = anim (local_home_dir,run_name,tmin,tmax, ...
     
     %%% Read tracer positions
     if (Np > 0)
-      data_file = fullfile(dirpath,[OUTN_TRACER,'_n=',num2str(n),'.dat']);
-%       tracers = readOutputFile(data_file,Np,2);                 
+      data_file = fullfile(dirpath,[OUTN_TRACER,'_n=',num2str(n),'.dat']);      
       tracers = readOutputFile(data_file,2,Np);                 
     end
     
     %%% Load streamfunction
     data_file = fullfile(dirpath,[OUTN_PSI,'_n=',num2str(n),'.dat']);
     psi = readOutputFile(data_file,Nr,Na);
+    
+    %%% Stop if we've run out of data
+    if (isempty(psi))
+      break;
+    end
     
     %%% Calculate the flow velocity
     ur = - (psi(:,[2:Na 1])-psi(:,[Na 1:Na-1])) ./ RR ./ da;
@@ -84,7 +85,6 @@ function M = anim (local_home_dir,run_name,tmin,tmax, ...
     %%% Modify tracer zonal positions so that they lie in [0 2pi/amult)
     for p=1:Np      
       tracers(2,p) = tracers(2,p) - 2*pi/amult * floor(tracers(1,p)/(2*pi/amult));                                        
-%       tracers(p,2) = tracers(p,2) - 2*pi/amult * floor(tracers(p,1)/(2*pi/amult));                                       
     end    
         
     %%% Used to check that the specified field exists
@@ -104,10 +104,10 @@ function M = anim (local_home_dir,run_name,tmin,tmax, ...
 %       contourf(XX/1000,YY/1000,vort/abs(f0),contours,'EdgeColor','None');              
       pcolor(XX,YY,vort/abs(f));
       shading interp;
-%       vortmax = max(max(abs(vort)));
-%       caxis([-vortmax vortmax]);
-      colormap redblue;
-      title(strcat(['Relative vorticity (s$^{-1}$) at t=',num2str(t,'%3.1f'),' seconds']),'FontSize',fontsize,'Interpreter','latex');
+      vortmax = max(max(abs(vort/abs(f))));
+      caxis([-vortmax vortmax]);
+      colormap(cmocean('balance'));
+      title(strcat(['Vortex Rossby number at t=',num2str(t,'%3.1f'),' seconds']),'FontSize',fontsize,'Interpreter','latex');
       
     end
     
@@ -122,7 +122,7 @@ function M = anim (local_home_dir,run_name,tmin,tmax, ...
 %       contourf(XX/1000,YY/1000,pv,contours,'EdgeColor','None');              
       pcolor(XX,YY,pv);
       shading interp;
-      colormap redblue;
+      colormap(cmocean('balance'));
       title(strcat(['Potential vorticity (s$^{-1}$) at t=',num2str(t,'%3.1f'),' seconds']),'FontSize',fontsize,'Interpreter','latex');
       
     end
@@ -168,6 +168,7 @@ function M = anim (local_home_dir,run_name,tmin,tmax, ...
     if (length(contours)>1)
       caxis([min(contours),max(contours)]);
     end
+      
     
     %%% Not a recognized field name
     if (~str_match)
@@ -178,6 +179,7 @@ function M = anim (local_home_dir,run_name,tmin,tmax, ...
     if (show_velocity)
       hold on;
       substep = 5;
+%       substep = 10;
       quiver(XX(1:substep:Nr,1:substep:Na),YY(1:substep:Nr,1:substep:Na),uu(1:substep:Nr,1:substep:Na),vv(1:substep:Nr,1:substep:Na),1.5,'Color','k');
       hold off;
     end
@@ -213,8 +215,8 @@ function M = anim (local_home_dir,run_name,tmin,tmax, ...
     %%% Add other labels to the plot    
 %     axis([0 Lx/1000 0 max(yy)/1000]);
 %     axis([150 250 250 350]);
-%     xlabel('x (east, km)','Interpreter','latex');
-%     ylabel('y (north, km)','Interpreter','latex');        
+    xlabel('x (m)','Interpreter','latex');
+    ylabel('y (m)','Interpreter','latex');        
     set(gca,'Position',plotloc);
     handle = colorbar;    
     set(handle,'FontSize',fontsize);    

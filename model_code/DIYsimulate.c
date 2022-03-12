@@ -6,6 +6,8 @@
  * 2D simulation of quasigeostrophic flow in a regular annulus.
  *
  * TODO maybe we should be using adaptive time stepping to make the code more robust?
+ * TODO a smagorinsky viscosity might be a good call for simulations not able to resolve the molecular viscosity
+ * TODO no-slip or no-stress boundary conditions?
  *
  */
 #include <time.h>

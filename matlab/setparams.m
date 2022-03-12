@@ -38,18 +38,31 @@ function setparams (local_home_dir,run_name)
   rmin = 0.1; %%% Inner wall radius
   rmax = 0.5; %%% Outer wall radius
   dr = 0.0025; %%% Radial grid spacing in m
+%   dr = 0.001; %%% Radial grid spacing in m
   H = 0.3; %%% Water depth in m
   Nr = ceil((rmax-rmin)/dr) + 1 %%% r-gridpoints
-  Na = ceil(2*pi*(rmax+rmin)/2/amult/dr) %%% theta-gridpoints
+%   Na = ceil(2*pi*(rmax+rmin)/2/amult/dr) %%% theta-gridpoints
+  Na = ceil(2*pi*sqrt(rmax*rmin)/amult/dr) %%% theta-gridpoints
   tmax = 180; %%% Integration time    
   nu = 1e-6; %%% Actual fluid viscosity  
-  f = 1; %%% Background rotation rate (rad/s)    
-  lambdaK = 0.08; %%% Initial eddy wavelength (m)
-  E0 = 0.00005; %%% Initial eddy energy (m^s/s^2)
+  f = 1; %%% Background rotation rate (rad/s)      
+  
+  %%% Tracer parameters
 %   Ntracs_r = 30;
 %   Ntracs_a = 180;
   Ntracs_r = 1;
-  Ntracs_a = 10000;
+  Ntracs_a = 100000;
+  
+  %%% Spin-down parameters
+  lambdaK = 0.08; %%% Initial eddy wavelength (m)
+%   lambdaK = 0.04; %%% Initial eddy wavelength (m)
+  E0 = 0.00005; %%% Initial eddy energy (m^s/s^2)
+%   E0 = 0; %%% Initial eddy energy (m^s/s^2)
+  
+  %%% Azimuthal flow parameters
+  %   zeta0 = -0.01; %%% Initial relative vorticity
+  zeta0 = 0; %%% Initial relative vorticity
+  psi0Init = 0.25*zeta0*(rmax^2-rmin^2); %%% Initial along-channel transport (c.f. Stewart et al. 2014)
   
   %%% Numerical viscosity is chosen to be order 1 at the grid scale over 
   %%% one dynamical time scale (1/f), but cannot be smaller than the
@@ -79,10 +92,10 @@ function setparams (local_home_dir,run_name)
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%  
      
   %%% Estimate maximum flow speed
-  Umax = 2*sqrt(2*E0)
+  Umax = max(sqrt(2*E0),2*abs(psi0Init/(rmax-rmin)));
 
   %%% Set timestep   
-  dt = 0.5*min(dr,rmin*da)/(Umax);    
+  dt = 0.25*min(dr,rmin*da)/(Umax);    
     
   %%% Correct dt so that tmax is an integer number of time steps.    
   Nt = ceil(tmax/dt)+1;      
@@ -102,17 +115,28 @@ function setparams (local_home_dir,run_name)
   PARAMS = addParameter(PARAMS,'amult',amult,PARM_INT);
   PARAMS = addParameter(PARAMS,'kappa',kappa,PARM_REALF);      
   PARAMS = addParameter(PARAMS,'nu',Ah,PARM_REALF);      
+  PARAMS = addParameter(PARAMS,'transportInit',psi0Init,PARM_REALF);      
     
   
   %%%%%%%%%%%%%%%%%%%%%%
   %%%%% BATHYMETRY %%%%%
   %%%%%%%%%%%%%%%%%%%%%%
   
-%   hh = zeros(Nr,Na);
-  Hb = 0.1;
-  Wb = pi/16;
-  Ab = pi;
-  hh = Hb*exp(-((AA-Ab)/Wb).^2);
+  %%% Nothing
+  hh = zeros(Nr,Na);
+  
+  %%% Ridge
+%   Hb = 0.1;
+%   Wb = pi/16;
+%   Ab = pi;
+%   hh = Hb*exp(-((AA-Ab)/Wb).^2);
+
+  %%% Isolated bump
+  X_bump = 0;
+  Y_bump = 0.3;
+  W_bump = 0.05;
+  H_bump = 0.05;
+  hh = H_bump*exp(-((XX-X_bump)/W_bump).^2-((YY-Y_bump)/W_bump).^2);
   
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -145,6 +169,12 @@ function setparams (local_home_dir,run_name)
   vort(2:Nr-1,:) = ( psi(3:Nr,:) - 2*psi(2:Nr-1,:) + psi(1:Nr-2,:) ) / dr^2 ...
                    + ( psi(3:Nr,:) - psi(1:Nr-2,:) ) ./ RR(2:Nr-1,1:Na) ./ (2*dr) ...
                    + ( psi(2:Nr-1,[2:Na 1]) - 2*psi(2:Nr-1,1:Na) + psi(2:Nr-1,[Na 1:Na-1]) ) ./ RR(2:Nr-1,1:Na).^2 ./ da^2;
+  
+  %%% Add initial flow component
+  vort = vort + zeta0;
+  
+  %%% Boundary conditions
+  vort([1 Nr],:) = 0;
          
   %%% Plot vorticity
   figure(3);  
@@ -183,10 +213,15 @@ function setparams (local_home_dir,run_name)
   %%%%% CREATE INPUT FILES %%%%%
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%     
   
-  %%% Initial streamfunction 
-  psiInitFile = 'psiInit.dat';
-  writeDataFile(fullfile(local_run_dir,psiInitFile),psi);
-  PARAMS = addParameter(PARAMS,'psiInitFile',psiInitFile,PARM_STR);  
+%   %%% Initial streamfunction 
+%   psiInitFile = 'psiInit.dat';
+%   writeDataFile(fullfile(local_run_dir,psiInitFile),psi);
+%   PARAMS = addParameter(PARAMS,'psiInitFile',psiInitFile,PARM_STR);  
+  
+  %%% Initial vorticity 
+  vortInitFile = 'vortInit.dat';
+  writeDataFile(fullfile(local_run_dir,vortInitFile),vort);
+  PARAMS = addParameter(PARAMS,'vortInitFile',vortInitFile,PARM_STR);  
 
   %%% Bathymetry  
   hhFile = 'hh.dat';          
