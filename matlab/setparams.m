@@ -51,7 +51,7 @@ function setparams (local_home_dir,run_name)
 %   Ntracs_r = 30;
 %   Ntracs_a = 180;
   Ntracs_r = 1;
-  Ntracs_a = 100000;
+  Ntracs_a = 10000;
   
   %%% Spin-down parameters
   lambdaK = 0.08; %%% Initial eddy wavelength (m)
@@ -60,7 +60,7 @@ function setparams (local_home_dir,run_name)
 %   E0 = 0; %%% Initial eddy energy (m^s/s^2)
   
   %%% Azimuthal flow parameters
-  %   zeta0 = -0.01; %%% Initial relative vorticity
+%   zeta0 = -0.1; %%% Initial relative vorticity
   zeta0 = 0; %%% Initial relative vorticity
   psi0Init = 0.25*zeta0*(rmax^2-rmin^2); %%% Initial along-channel transport (c.f. Stewart et al. 2014)
   

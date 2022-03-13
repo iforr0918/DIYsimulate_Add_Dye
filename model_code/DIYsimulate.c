@@ -8,6 +8,7 @@
  * TODO maybe we should be using adaptive time stepping to make the code more robust?
  * TODO a smagorinsky viscosity might be a good call for simulations not able to resolve the molecular viscosity
  * TODO no-slip or no-stress boundary conditions?
+ * TODO add temperature variable following Warneford and Dellar 2013?
  *
  */
 #include <time.h>
@@ -169,7 +170,6 @@ real calcGamma (real ** psi)
     
     for (j = 0; j < Na; j ++)
     {
-        // TODO check this
         u_bdy[j] = (-psi[2][j]+4*psi[1][j]-3*psi[0][j]) / _2dr;
     }
   
@@ -582,19 +582,23 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
   
   
     // BOUNDARY CIRCULATION (see Mcwilliams 1977, Stewart et al. 2014)
-    
+          
   
-    // TODO I think we should come back to this. No-slip BCs may be better
-    // Time derivative of Gamma - simple decay at rate kap0
+    // Loop over boundary points
     for (j = 0; j < Na; j ++)
     {
-         dt_Gamma_wrk[j] = - kap[i][j] * (psi_r[1][j]-psi_r[0][j])/dr;
+        // First-order approximation to linear drag term
+        // dt_Gamma_wrk[j] = - kap[i][j] * (psi_r[1][j]-psi_r[0][j])/dr;
+      
+        // Second-order approximation to linear drag term
+        dt_Gamma_wrk[j] = - kap[i][j] * (-psi_r[2][j]+4*psi_r[1][j]-3*psi_r[0][j]) / _2dr;
         
-        // Second-order approximation to A2*d^3psi/dr^3, assuming odd derivatives of u vanish on the boundary
-      // TODO not sure this is right
+        // Second-order approximation to nu*(d^3psi/dr^3 + 1/r d^psi/dr^2)
         if (nu != 0)
         {
-            dt_Gamma_wrk[j] += (nu/(dr*dr*dr)) * (-psi_r[2][j]+2*psi_r[1][j]-psi_r[0][j]);
+            // dt_Gamma_wrk[j] += (nu/(dr*dr*dr)) * (-psi_r[2][j]+2*psi_r[1][j]-psi_r[0][j]);
+          dt_Gamma_wrk[j] += (nu/(dr*dr*dr)) * (-1.5*psi_r[4][j]+7*psi_r[3][j]-12*psi_r[2][j]+9*psi_r[1][j]-2.5*psi_r[0][j])
+                           + (nu/(rmin*_drsq)) * (-psi_r[3][j]+4*psi_r[2][j]-5*psi_r[1][j]+2*psi_r[0][j]);
         }
     }
     *dt_Gamma_r = kahanSum(dt_Gamma_wrk,Na)*rmin*da;
@@ -1425,8 +1429,7 @@ int main (int argc, char ** argv)
     /////////////////////////////////////////////
     ///// BEGIN STREAMFUNCTION SOLVER SETUP /////
     /////////////////////////////////////////////
-    
-    // TODO need to come back to this
+        
     // Initial streamfunction on the outer boundary. We use this as a
     // guess for the typical transport in the channel when calculating
     // the streamfunction at later times.
