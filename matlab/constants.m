@@ -14,7 +14,7 @@ OUTN_PV = 'PV';
 OUTN_PSI = 'PSI';
 OUTN_TRACER = 'TRACER';
 OUTN_TFILE = 'time.txt';
-
+OUTN_RED = 'RED';
 %%% File system
 exec_name = 'DIYsimulate.exe';
 model_code_dir = 'model_code';
