@@ -35,11 +35,11 @@ function setparams (local_home_dir,run_name)
   PARAMS = {};
             
   amult = 1; %%% Number of subdivisions of the annulus
-  rmin = 0.1; %%% Inner wall radius
-  rmax = 0.5; %%% Outer wall radius
+  rmin = 0.17/10; %%% Inner wall radius
+  rmax = 0.172; %%% Outer wall radius
   dr = 0.0025; %%% Radial grid spacing in m
 %   dr = 0.001; %%% Radial grid spacing in m
-  H = 0.3; %%% Water depth in m
+  H = 0.05; %%% Water depth in m
   Nr = ceil((rmax-rmin)/dr) + 1 %%% r-gridpoints
 %   Na = ceil(2*pi*(rmax+rmin)/2/amult/dr) %%% theta-gridpoints
   Na = ceil(2*pi*sqrt(rmax*rmin)/amult/dr) %%% theta-gridpoints
@@ -50,18 +50,18 @@ function setparams (local_home_dir,run_name)
   %%% Tracer parameters
 %   Ntracs_r = 30;
 %   Ntracs_a = 180;
-  Ntracs_r = 1;
-  Ntracs_a = 10000;
+  Ntracs_r = 40;
+  Ntracs_a = 200;
   
   %%% Spin-down parameters
   lambdaK = 0.08; %%% Initial eddy wavelength (m)
 %   lambdaK = 0.04; %%% Initial eddy wavelength (m)
-  E0 = 0.00005; %%% Initial eddy energy (m^s/s^2)
-%   E0 = 0; %%% Initial eddy energy (m^s/s^2)
+%   E0 = 0.00005; %%% Initial eddy energy (m^s/s^2)
+   E0 = 0; %%% Initial eddy energy (m^s/s^2)
   
   %%% Azimuthal flow parameters
-%   zeta0 = -0.1; %%% Initial relative vorticity
-  zeta0 = 0; %%% Initial relative vorticity
+  zeta0 = -0.2; %%% Initial relative vorticity
+  %zeta0 = 0; %%% Initial relative vorticity
   psi0Init = 0.25*zeta0*(rmax^2-rmin^2); %%% Initial along-channel transport (c.f. Stewart et al. 2014)
   
   %%% Numerical viscosity is chosen to be order 1 at the grid scale over 
@@ -132,11 +132,39 @@ function setparams (local_home_dir,run_name)
 %   hh = Hb*exp(-((AA-Ab)/Wb).^2);
 
   %%% Isolated bump
-  X_bump = 0;
-  Y_bump = 0.3;
-  W_bump = 0.05;
-  H_bump = 0.05;
-  hh = H_bump*exp(-((XX-X_bump)/W_bump).^2-((YY-Y_bump)/W_bump).^2);
+%   X_bump = 0;
+%   Y_bump = 0.3;
+%   W_bump = 0.05;
+%   H_bump = 0.05;
+%   hh = H_bump*exp(-((XX-X_bump)/W_bump).^2-((YY-Y_bump)/W_bump).^2);
+%   
+
+  %%% TANH PUCK
+  X_puck = 0;
+  Y_puck = (rmax -rmin)/2;
+  H_puck = H/8;
+  Rad_puck = (rmax -rmin)/8;
+  puck_slope_coef = 250;
+  d_to_puck = sqrt((XX-X_puck).^2+(YY-Y_puck).^2);
+  hh = (H_puck/2)*(tanh(puck_slope_coef.*(Rad_puck - d_to_puck))+1);
+  mesh(XX, YY, hh)
+  zlim([0 H])
+  %view(90,5)
+
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  %%%%% DYE INITIAL COND %%%%%
+  %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+  
+  %%% Nothing
+  redred = zeros(Nr,Na);
+  
+  %%% Isolated exp red splat
+   X_splat = 0;
+   Y_splat = -(rmax-rmin)/2;;
+   W_splat = 0.02;
+   H_splat = 0.5;
+   redred = H_splat*exp(-((XX-X_splat)/W_splat).^2-((YY-Y_splat)/W_splat).^2);
+  
   
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -228,11 +256,16 @@ function setparams (local_home_dir,run_name)
   writeDataFile(fullfile(local_run_dir,hhFile),hh); 
   PARAMS = addParameter(PARAMS,'bathyFile',hhFile,PARM_STR); 
 
-  %%% Bathymetry  
+  %%% Tracer  
   tracFile = 'tracInitFile.dat';          
   writeDataFile(fullfile(local_run_dir,tracFile),tracPos'); 
   PARAMS = addParameter(PARAMS,'tracInitFile',tracFile,PARM_STR); 
   
+  %%% Red Tracer  
+  redTracFile = 'redTracInitFile.dat';          
+  writeDataFile(fullfile(local_run_dir,redTracFile),redred'); 
+  PARAMS = addParameter(PARAMS,'redTracInitFile',redTracFile,PARM_STR); 
+
   %%% Create the input parameter file
   writeParamFile(pfname,PARAMS);    
   
