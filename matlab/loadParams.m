@@ -76,4 +76,8 @@ if (~kappa_found)
 end      
 
 %%% Load topography
-hh = readDataFile(params_file,dirpath,'bathyFile',Nr,Na,zeros(Nr,Na)); 
+hh = readDataFile(params_file,dirpath,'bathyFile',Nr,Na,zeros(Nr,Na));
+
+%%% Load Red Initial Dye Concentration
+redred = readDataFile(params_file,dirpath,'redTracInitFile',Nr,Na,zeros(Nr,Na));
+
