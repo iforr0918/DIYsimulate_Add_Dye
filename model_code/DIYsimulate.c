@@ -691,7 +691,24 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             dt_dyeline_r[p].a = dr_psi_tp / rpos;
         }
     }
-  
+    
+    //evolve dye
+    
+    // Calculate an offset so that we can treat all tracer
+    // azimuthal positions as positive numbers
+    
+    
+    
+    for(i = 0; i < Nr; i ++){
+        for(j = 0; j < Na; j ++){
+            
+            // Calculate position tendencies
+            dt_redred_r[p] = - da_psi_tp / rpos;
+            //dt_dyeline_r[p].a = dr_psi_tp / rpos; ????
+        }
+    }
+
+
 }
 
 
