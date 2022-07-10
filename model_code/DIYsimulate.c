@@ -9,7 +9,7 @@
  * TODO a smagorinsky viscosity might be a good call for simulations not able to resolve the molecular viscosity
  * TODO no-slip or no-stress boundary conditions?
  * TODO add temperature variable following Warneford and Dellar 2013?
- *
+ * Add Dye Tracers - Isaac Forrest
  */
 #include <time.h>
 
@@ -17,7 +17,7 @@
 #include "ab.h"
 #include "DIYdefs.h"
 
-#define NPARAMS 19
+#define NPARAMS 20
 
 #define RMATALLOC(mat,m,n)                                      \
     mat = rmatalloc(m,n);                                       \
@@ -53,9 +53,11 @@ fftw_plan backward_transform = NULL;
 real ** qvort_r = NULL;
 real ** vort_r = NULL;
 real ** psi_r = NULL;
+
 complex ** qvort_s = NULL;
 complex ** vort_s = NULL;
 complex ** psi_s = NULL;
+
 
 // Used for calculation of advective terms
 real ** vq_r = NULL;
@@ -69,6 +71,10 @@ complex ** da_vq_s = NULL;
 complex ** da_psi_s = NULL;
 complex ** dada_vort_s = NULL;
 real ** dada_vort_r = NULL;
+//Isaac
+real ** redred_r = NULL;
+//end Isaac
+
 
 // Used for boundary circulation evolution
 real * u_bdy = NULL;
@@ -152,8 +158,11 @@ const uint method_a = METHOD_FD;
 static const char OUTN_PSI[] = "PSI";
 static const char OUTN_PV[] = "PV";
 static const char OUTN_TRACER[] = "TRACER";
-static const char OUTN_TFILE[] = "time.txt";
 
+static const char OUTN_TFILE[] = "time.txt";
+//Isaac
+static const char OUTN_RED[] = "RED";
+//End Isaac
 
 
 /**
@@ -362,7 +371,10 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
     // Pointers to tracer data
     tracer * dyeline_r = NULL;
     tracer * dt_dyeline_r = NULL;
-
+    //Isaac
+    //dye vars
+    //confused on what vars I need here
+    //End Isaac
     // Variables for tracer tendency calculation
     real rpos = 0;
     real apos = 0;
@@ -679,7 +691,24 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             dt_dyeline_r[p].a = dr_psi_tp / rpos;
         }
     }
-  
+    
+    //evolve dye
+    
+    // Calculate an offset so that we can treat all tracer
+    // azimuthal positions as positive numbers
+    
+    
+    
+    for(i = 0; i < Nr; i ++){
+        for(j = 0; j < Na; j ++){
+            
+            // Calculate position tendencies
+            dt_redred_r[p] = - da_psi_tp / rpos;
+            //dt_dyeline_r[p].a = dr_psi_tp / rpos; ????
+        }
+    }
+
+
 }
 
 
@@ -692,7 +721,7 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
  * or true if the write was successful.
  *
  */
-bool writeModelState (const int t, const int n, real ** qvort, real ** psi, char * outdir)
+bool writeModelState (const int t, const int n, real ** qvort, real ** psi, real ** red_c,char * outdir)
 {
     char outfile[MAX_PARAMETER_FILENAME_LENGTH];
     char nstr[MAX_PARAMETER_FILENAME_LENGTH];
@@ -733,7 +762,29 @@ bool writeModelState (const int t, const int n, real ** qvort, real ** psi, char
     printMatrix(outfd,psi,Nr,Na);
     fclose(outfd);
     
+    //Isaac
+    
+    // Write Red Dye Concentration
+    strcpy(outfile,outdir);
+    strcat(outfile,"/");
+    strcat(outfile,OUTN_RED);
+    strcat(outfile,"_n=");
+    strcat(outfile,nstr);
+    strcat(outfile,".dat");
+    outfd = fopen(outfile,"w");
+    if (outfd == NULL)
+    {
+        fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
+        return false;
+    }
+    printMatrix(outfd,red_c,Nr,Na);
+    fclose(outfd);
+    //End Isaac
+    
     return true;
+    
+    
+    
 }
 
 
@@ -884,14 +935,25 @@ int main (int argc, char ** argv)
     tracer * dyeline = NULL;
     tracer * dyeline_buf = NULL;
     tracer * dyeline_out = NULL;
-  
+    
+    //Isaac
+    //For storing dye vars
+    real ** redred = NULL;
+    real ** redred_buf = NULL;
+    real ** redred_out = NULL;
+    //Isaac End
+    
     // Work arrays for reading initial conditions
     real ** vortInit = NULL;
     real ** psiInit = NULL;
     complex ** psiInit_s = NULL;
     complex ** dada_psiInit_s = NULL;
     real ** dada_psiInit_r = NULL;
-  
+    //Isaac
+    //For reading initial dye cond
+    real ** redredInit = NULL;
+    //Isaac End
+    
     // Work arrays for Runge-Kutta algorithms
     real * vars = NULL;
     real * vars_out = NULL;
@@ -945,13 +1007,18 @@ int main (int argc, char ** argv)
     char vortInitFile[MAX_PARAMETER_FILENAME_LENGTH];
     char psiInitFile[MAX_PARAMETER_FILENAME_LENGTH];
     char tracInitFile[MAX_PARAMETER_FILENAME_LENGTH];
-    
+    //Isaac
+    // Filename holders for dye input parameter arrays
+    char redInitFile[MAX_PARAMETER_FILENAME_LENGTH];
+    //Isaac End
     // Default file name parameters - zero-length strings
     bathyFile[0] = '\0';
     vortInitFile[0] = '\0';
     psiInitFile[0] = '\0';
     tracInitFile[0] = '\0';
-
+    //Isaac
+    redInitFile[0] = '\0';
+    //Isaac End
     // Define input parameter data
     setParam(params,0,"Nr","%u",&Nr,false);
     setParam(params,1,"Na","%u",&Na,false);
@@ -972,8 +1039,10 @@ int main (int argc, char ** argv)
     setParam(params,16,"vortInitFile","%s",&vortInitFile,true);
     setParam(params,17,"psiInitFile","%s",&psiInitFile,true);
     setParam(params,18,"tracInitFile","%s",&tracInitFile,true);
-  
-
+    //Isaac
+    setParam(params,19,"redInitFile","%s",&redInitFile,true);
+    //Isaac End
+    
     // Check that a file name has been specified
     if (argc < 3)
     {
@@ -1019,6 +1088,9 @@ int main (int argc, char ** argv)
   
     // Calculate important values from the parameters
     N = 1 + Nr*Na + Np*sizeof(tracer);
+    //Isaac
+    //Hi Jordyn I am pretty confused about if I should modify N here?
+    //End Isaac
     dr = (rmax-rmin)/(Nr-1);
     da = _2PI / (Na*amult);
     dt = (tmax-tmin)/(Nt-1);
@@ -1106,18 +1178,33 @@ int main (int argc, char ** argv)
     Gamma_out = vars_out;
     dyeline_out = (tracer *) (vars_out+1+Nr*Na);
     RMATALLOC(psi_out,Nr,Na);
+    
+    //Isaac
+    //Hi again Jordyn
+    //I think I need to allocate
+    //redred
+    //redred_buf
+    //redred_out
+    //above but am confused on how/where to do so and how/if to modify vars, Gamma_out, N accordingly
+    //Isaac End
   
     // Initial conditions
     RMATALLOC(vortInit,Nr,Na);
     RMATALLOC(psiInit,Nr,Na);
     RMATALLOC(dada_psiInit_r,Nr,Na);
+    //Isaac
+    RMATALLOC(redredInit,Nr,Na);
+    //Isaac End
     CMATALLOC(psiInit_s,Nr,Na);
     CMATALLOC(dada_psiInit_s,Nr,Na);
 
     // Wrapper matrices for input arrays in 'tderiv' function
     CHECKALLOC(dt_qvort_r,Nr*sizeof(real *));
     CHECKALLOC(qvort_r,Nr*sizeof(real *));
-  
+    //Isaac
+    CHECKALLOC(redred_r,Nr*sizeof(real *));
+    RMATALLOC(redred_r,Nr,Na);
+    //end Isaac
     // Model state variables in real and spectral space
     RMATALLOC(qvort_r,Nr,Na);
     RMATALLOC(dt_qvort_r,Nr,Na);
@@ -1126,6 +1213,10 @@ int main (int argc, char ** argv)
     CMATALLOC(vort_s,Nr,Na);
     CMATALLOC(qvort_s,Nr,Na);
     CMATALLOC(psi_s,Nr,Na);
+    
+    //Isaac
+    
+    //end Isaac
 
     // Work arrays for tderiv
     RMATALLOC(vq_r,Nr,Na);
@@ -1161,6 +1252,7 @@ int main (int argc, char ** argv)
     CHECKALLOC(kk,Na*sizeof(real));
     CHECKALLOC(kksq,Na*sizeof(real));
     RMATALLOC(hh,Nr,Na);
+
     RMATALLOC(kap,Nr,Na);
     CHECKALLOC(filter,Na*sizeof(real));
 
@@ -1262,6 +1354,17 @@ int main (int argc, char ** argv)
             }
         }
     }
+    //Isaac
+    if (strlen(redInitFile) > 0)
+    {
+        if (!readMatrix(redInitFile,redredInit,Nr,Na,stderr))
+        {
+            fprintf(stderr,"ERROR: Could not read data from %s\n",redInitFile);
+            printUsage();
+            return 0;
+        }
+    }
+    //End Isaac
 
     // Read relative vorticity initialization data and compute initial streamfunction
     if (initVort)
@@ -1463,7 +1566,7 @@ int main (int argc, char ** argv)
     }
     
     // Write out the initial data
-    if (!writeModelState(t,n_saves,qvort,psiInit,outdir))
+    if (!writeModelState(t,n_saves,qvort,psiInit,redredInit,outdir))//Isaac modified
     {
         fprintf(stderr,"Unable to write model state");
         printUsage();
@@ -1578,7 +1681,13 @@ int main (int argc, char ** argv)
         {
             // Write out the latest model state
             calcPsi(qvort_out,*Gamma_out,psi_out);
-            if (!writeModelState(t,n_saves,qvort_out,psi_out,outdir))
+            //Isaac
+            //Hi Jordyn! Should I be doing something like
+            //     dyeline_buf[i].r = wc*dyeline[i].r + wn*dyeline_out[i].r;
+            //     dyeline_buf[i].a = wc*dyeline[i].a + wn*dyeline_out[i].a;
+            //Here like andrew does below but with my redred_buf?
+            //End Isaac
+            if (!writeModelState(t,n_saves,qvort_out,psi_out,redred_out,outdir))//Isaac Modified
             {
                 fprintf(stderr,"Unable to write model state");
                 printUsage();
