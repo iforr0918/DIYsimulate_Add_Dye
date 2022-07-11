@@ -73,6 +73,7 @@ complex ** dada_vort_s = NULL;
 real ** dada_vort_r = NULL;
 //Isaac
 real ** redred_r = NULL;
+real ** dt_redred_r = NULL;
 //end Isaac
 
 
@@ -1087,7 +1088,9 @@ int main (int argc, char ** argv)
     }
   
     // Calculate important values from the parameters
+    //N = 1 + Nr*Na + Np*sizeof(tracer) + Nr*Na;
     N = 1 + Nr*Na + Np*sizeof(tracer);
+
     //Isaac
     //Hi Jordyn I am pretty confused about if I should modify N here?
     //End Isaac
@@ -1185,6 +1188,7 @@ int main (int argc, char ** argv)
     //redred
     //redred_buf
     //redred_out
+    //
     //above but am confused on how/where to do so and how/if to modify vars, Gamma_out, N accordingly
     //Isaac End
   
@@ -1192,9 +1196,6 @@ int main (int argc, char ** argv)
     RMATALLOC(vortInit,Nr,Na);
     RMATALLOC(psiInit,Nr,Na);
     RMATALLOC(dada_psiInit_r,Nr,Na);
-    //Isaac
-    RMATALLOC(redredInit,Nr,Na);
-    //Isaac End
     CMATALLOC(psiInit_s,Nr,Na);
     CMATALLOC(dada_psiInit_s,Nr,Na);
 
@@ -1202,8 +1203,19 @@ int main (int argc, char ** argv)
     CHECKALLOC(dt_qvort_r,Nr*sizeof(real *));
     CHECKALLOC(qvort_r,Nr*sizeof(real *));
     //Isaac
+    CHECKALLOC(redred,Nr*sizeof(real *));
+    CHECKALLOC(redred_buf,Nr*sizeof(real *));
+    CHECKALLOC(redred_out,Nr*sizeof(real *));
     CHECKALLOC(redred_r,Nr*sizeof(real *));
+    CHECKALLOC(dt_redred_r,Nr*sizeof(real *));
+    CHECKALLOC(redredInit,Nr*sizeof(real *));
+    
+    RMATALLOC(redred,Nr,Na);
+    RMATALLOC(redred_buf,Nr,Na);
+    RMATALLOC(redred_out,Nr,Na);
     RMATALLOC(redred_r,Nr,Na);
+    RMATALLOC(dt_redred_r,Nr,Na);
+    RMATALLOC(redredInit,Nr,Na);
     //end Isaac
     // Model state variables in real and spectral space
     RMATALLOC(qvort_r,Nr,Na);
@@ -1214,10 +1226,6 @@ int main (int argc, char ** argv)
     CMATALLOC(qvort_s,Nr,Na);
     CMATALLOC(psi_s,Nr,Na);
     
-    //Isaac
-    
-    //end Isaac
-
     // Work arrays for tderiv
     RMATALLOC(vq_r,Nr,Na);
     CMATALLOC(vq_s,Nr,Na);
@@ -1355,6 +1363,7 @@ int main (int argc, char ** argv)
         }
     }
     //Isaac
+    //read red dye initial concentration
     if (strlen(redInitFile) > 0)
     {
         if (!readMatrix(redInitFile,redredInit,Nr,Na,stderr))
@@ -1522,6 +1531,40 @@ int main (int argc, char ** argv)
             return 0;
         }
     }
+    
+    //Initial red dye concentration
+    if (strlen(redInitFile)>0)
+    {
+        if (!readMatrix(redInitFile,redredInit,Nr,Na,stderr))
+        {
+            fprintf(stderr,"ERROR: Could not read data from %s\n",redInitFile);
+            printUsage();
+            return 0;
+        }
+      
+        // Ensure relative vorticity is zero on boundaries (free slip condition)
+        // NOTE: remember that qvort is storing relative vorticity at this point in the code
+        for (j = 0; j < Na; j ++)
+        {
+            if ((redredInit[0][j] != 0) || (redred[Nr-1][j] != 0))
+            {
+                fprintf(stderr,"ERROR: Red Dye concentration must be zero on the boundaries\n");
+                printUsage();
+                return 0;
+            }
+        }
+        
+        
+        for (i = 0; i < Nr; i++)
+        {
+            for (j = 0; j < Na; j++)
+            {
+                redred[i][j] = redredInit[i][j];
+            }
+        }
+      
+    } // end if (strlen(redInitFile)>0)
+    
     
     //////////////////////////////////////
     ///// END READING PARAMETER DATA /////
