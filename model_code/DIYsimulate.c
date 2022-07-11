@@ -597,7 +597,7 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
                 // Theta-derivatives calculated via FFT
                 da_vq = da_vq_r[i][j];
                 
-                da_vc_Red = da_vc_Red[i][j];
+                da_vc_Red = da_vc_Red_r[i][j];
                 
                 if (nu != 0)
                 {
