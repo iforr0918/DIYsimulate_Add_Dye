@@ -164,7 +164,9 @@ function setparams (local_home_dir,run_name)
    W_splat = 0.02;
    H_splat = 0.5;
    redred = H_splat*exp(-((XX-X_splat)/W_splat).^2-((YY-Y_splat)/W_splat).^2);
-  
+   %enforce BC
+   redred(1,:) = 0;
+   redred(end,:) = 0;
   
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
