@@ -53,28 +53,35 @@ fftw_plan backward_transform = NULL;
 real ** qvort_r = NULL;
 real ** vort_r = NULL;
 real ** psi_r = NULL;
+real ** redred_r = NULL;
 
 complex ** qvort_s = NULL;
 complex ** vort_s = NULL;
 complex ** psi_s = NULL;
-
+complex ** redred_s = NULL;
 
 // Used for calculation of advective terms
 real ** vq_r = NULL;
 complex ** vq_s = NULL;
 
+real ** vc_Red_r = NULL;
+complex ** vc_Red_s = NULL;
+
+//
+
 // Real and spectral derivatives with respect to theta
 real ** da_vq_r = NULL;
+real ** da_vc_Red_r = NULL;
 real ** da_psi_r = NULL;
 real ** dr_psi_r = NULL;
 complex ** da_vq_s = NULL;
+complex ** da_vc_Red_s = NULL;
 complex ** da_psi_s = NULL;
 complex ** dada_vort_s = NULL;
+//complex ** dada_redred_s = NULL;
+//real ** dada_redred_r = NULL;
 real ** dada_vort_r = NULL;
-//Isaac
-real ** redred_r = NULL;
-real ** dt_redred_r = NULL;
-//end Isaac
+
 
 
 // Used for boundary circulation evolution
@@ -84,6 +91,7 @@ real * dt_Gamma_wrk = NULL;
 // Time derivative of real vorticity - for use in time
 // derivative function
 real ** dt_qvort_r = NULL;
+real ** dt_redred_r = NULL;
 
 // Coefficient arrays used in the update_psi method
 real ** psicoeffb = NULL;
@@ -364,7 +372,10 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
     real dr_ruq = 0;
     real dada_vort = 0;
     real dada_qvort = 0;
-
+    
+    real da_vc_Red = 0;
+    real dr_ruc_Red = 0;
+    
     // Pointer to circulation data
     real * Gamma_r = 0;
     real * dt_Gamma_r = NULL;
@@ -372,10 +383,12 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
     // Pointers to tracer data
     tracer * dyeline_r = NULL;
     tracer * dt_dyeline_r = NULL;
-    //Isaac
-    //dye vars
-    //confused on what vars I need here
-    //End Isaac
+    
+    //Pointers to Red Dye data
+    // Pointer to circulation data
+    //real * Red_r = 0;
+    //real * dt_Red_r = NULL;
+    
     // Variables for tracer tendency calculation
     real rpos = 0;
     real apos = 0;
@@ -397,6 +410,9 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
     // Copy the vorticity data into the transform matrix
     memcpy(*qvort_r,vars+1,Nr*Na*sizeof(real));
   
+    // Copy the red dye data into the transform matrix
+    memcpy(*redred_r,vars+1+ Nr*Na+ Np*sizeof(tracer),Nr*Na*sizeof(real));
+    
     // Make sure time derivatives are zero before we set them
     memset(dt_vars,0,numvars*sizeof(real));
     
@@ -405,8 +421,8 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
     dt_Gamma_r = (real *) dt_vars;
     dyeline_r = (tracer *) (vars + 1 + Nr*Na);
     dt_dyeline_r = (tracer *) (dt_vars + 1 + Nr*Na);
-
-
+    //Red_r = (real *) (vars + 1 + Nr*Na + Np*sizeof(tracer)) ;
+    //dt_Red_r = (real *) (dt_vars + 1 + Nr*Na + Np*sizeof(tracer));
 
     // CALCULATION OF THE STREAMFUNCTION
 
@@ -490,6 +506,14 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             vq_r[i][j] = qvort_r[i][j]*(psi_r[i+1][j]-psi_r[i-1][j])/_2dr;
         }
     }
+    for (i = 1; i < Nr-1; i ++)
+    {
+        for (j = 0; j < Na; j ++)
+        {
+            vc_Red_r[i][j] = redred_r[i][j]*(psi_r[i+1][j]-psi_r[i-1][j])/_2dr;
+        }
+    }
+    
 
     // If we're using a pseudospectral algorithm, calculate other
     // theta derivatives now
@@ -498,7 +522,11 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
         // Transform qvort_r -> qvort_s and vq_r -> vq_s
         fftw_execute_dft_r2c(forward_transform,*vq_r,*vq_s);
         fftw_execute_dft_r2c(forward_transform,*qvort_r,*qvort_s);
-
+        
+        // Transform redreds_r -> redred_s and vc_Red_r -> vc_Red_s
+        fftw_execute_dft_r2c(forward_transform,*vc_Red_r,*vc_Red_s);
+        fftw_execute_dft_r2c(forward_transform,*redred_r,*redred_s);
+        
         // Calculate theta-derivatives in spectral space:
         // da_psi_s, da_vort_s and dada_vort_s
         for (i = 0; i < Nr; i ++)
@@ -515,16 +543,38 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
                 }
             }
         }
+        
+        for (i = 0; i < Nr; i ++)
+        {
+            for (j = 0; j < Na; j ++)
+            {
+                da_vc_Red_s[i][j][0] = -amult*kk[j]*vc_Red_s[i][j][1];
+                da_vc_Red_s[i][j][1] = amult*kk[j]*vc_Red_s[i][j][0];
+
+                if (false)//nu != 0) worrying about diffusion later
+                {
+                    //dada_vort_s[i][j][0] = -amultsq*kksq[j]*vort_s[i][j][0];
+                    //dada_vort_s[i][j][1] = -amultsq*kksq[j]*vort_s[i][j][1];
+                }
+            }
+        }
 
         // Transform back to get da_vq_r, dada_vort_r
         fftw_execute_dft_c2r(backward_transform,*da_vq_s,*da_vq_r);
+        fftw_execute_dft_c2r(backward_transform,*da_vc_Red_s,*da_vc_Red_r);
         normalise(*da_vq_r,Nr*Na,Na);
-
+        normalise(*da_vc_Red_r,Nr*Na,Na);
+        
         if (nu != 0)
         {
             fftw_execute_dft_c2r(backward_transform,*dada_vort_s,*dada_vort_r);
             normalise(*dada_vort_r,Nr*Na,Na);
-        }        
+        }
+        if (false)//nu != 0) worrying about diffusion later
+        {
+            //fftw_execute_dft_c2r(backward_transform,*dada_vort_s,*dada_vort_r);
+            //normalise(*dada_vort_r,Nr*Na,Na);
+        }
     }
 
 
@@ -546,11 +596,18 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             {
                 // Theta-derivatives calculated via FFT
                 da_vq = da_vq_r[i][j];
-
+                
+                da_vc_Red = da_vc_Red[i][j];
+                
                 if (nu != 0)
                 {
                     dada_vort = dada_vort_r[i][j];
                 }
+                
+                //if (nu != 0)
+                //{
+                //    dada_vort = dada_vort_r[i][j];
+                //}
             }
 
             // Finite-differencing method
@@ -558,21 +615,36 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             {
                 // Calculate theta-derivatives using second order central differencing
                 da_vq = (vq_r[i][jp1]-vq_r[i][jm1]) / _2da;
-
+                
+                da_vc_Red = (vc_Red_r[i][jp1]-vc_Red_r[i][jm1]) / _2da;
+                
                 if (nu != 0)
                 {
                     dada_vort = (vort_r[i][jp1]-2*vort_r[i][j]+vort_r[i][jm1]) / _dasq;
                 }
+                
+                //if (nu != 0)
+                //{
+                //    dada_vort = (vort_r[i][jp1]-2*vort_r[i][j]+vort_r[i][jm1]) / _dasq;
+                //}
             }
 
             // r-derivatives
             dr_ruq = (qvort_r[i-1][j]*da_psi_r[i-1][j]-qvort_r[i+1][j]*da_psi_r[i+1][j]) / _2dr;
+            
+            dr_ruc_Red = (redred_r[i-1][j]*da_psi_r[i-1][j]-redred_r[i+1][j]*da_psi_r[i+1][j]) / _2dr;
 
             if (nu != 0)
             {
                 dr_vort = (vort_r[i+1][j]-vort_r[i-1][j]) / _2dr;
                 drdr_vort = (vort_r[i+1][j]-2*vort_r[i][j]+vort_r[i-1][j]) / _drsq;
             }
+            
+            //if (nu != 0)
+            //{
+            //    dr_vort = (vort_r[i+1][j]-vort_r[i-1][j]) / _2dr;
+            //    drdr_vort = (vort_r[i+1][j]-2*vort_r[i][j]+vort_r[i-1][j]) / _drsq;
+            //}
 
             // Calculate d(qvort)/dt
             dt_qvort_r[i][j] = - (dr_ruq + da_vq) / rr[i];
@@ -587,13 +659,29 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
                 // the discrete formulation of which is identical to that of (1/r)*(r*q_r)_r
                 dt_qvort_r[i][j] += nu*(drdr_vort+dr_vort/rr[i]+dada_vort/rrsq[i]);                
             }
+            
+            // Calculate d(c_Red)/dt
+            dt_redred_r[i][j] = - (dr_ruc_Red + da_vc_Red) / rr[i];
+
+            //if (kap0 != 0)
+            //{
+            //    dt_qvort_r[i][j] -= kap[i][j]*vort_r[i][j];
+            //}
+            //if (nu != 0)
+            //{
+                // NOTE: This calculation of the r-derivatives is q_rr + (1/r)q_r,
+                // the discrete formulation of which is identical to that of (1/r)*(r*q_r)_r
+                //dt_qvort_r[i][j] += nu*(drdr_vort+dr_vort/rr[i]+dada_vort/rrsq[i]);
+            //}
         }
     }
-  
+    
+    
+    
     // Copy the calculated time derivative values into the output array
     memcpy(dt_vars+1,*dt_qvort_r,Nr*Na*sizeof(real));
-  
-  
+    memcpy(dt_vars+ 1 + Nr*Na + Np*sizeof(tracer),*dt_redred_r,Nr*Na*sizeof(real));
+    
     // BOUNDARY CIRCULATION (see Mcwilliams 1977, Stewart et al. 2014)
           
   
@@ -692,23 +780,6 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             dt_dyeline_r[p].a = dr_psi_tp / rpos;
         }
     }
-    
-    //evolve dye
-    
-    // Calculate an offset so that we can treat all tracer
-    // azimuthal positions as positive numbers
-    
-    
-    
-    for(i = 0; i < Nr; i ++){
-        for(j = 0; j < Na; j ++){
-            
-            // Calculate position tendencies
-            dt_redred_r[p] = - da_psi_tp / rpos;
-            //dt_dyeline_r[p].a = dr_psi_tp / rpos; ????
-        }
-    }
-
 
 }
 
@@ -1088,12 +1159,9 @@ int main (int argc, char ** argv)
     }
   
     // Calculate important values from the parameters
-    //N = 1 + Nr*Na + Np*sizeof(tracer) + Nr*Na;
-    N = 1 + Nr*Na + Np*sizeof(tracer);
+    N = 1 + Nr*Na + Np*sizeof(tracer) + Nr*Na;
+    //N = 1 + Nr*Na + Np*sizeof(tracer);
 
-    //Isaac
-    //Hi Jordyn I am pretty confused about if I should modify N here?
-    //End Isaac
     dr = (rmax-rmin)/(Nr-1);
     da = _2PI / (Na*amult);
     dt = (tmax-tmin)/(Nt-1);
@@ -1170,27 +1238,25 @@ int main (int argc, char ** argv)
     CHECKALLOC(qvort,Nr*sizeof(real *));
     CHECKALLOC(qvort_buf,Nr*sizeof(real *));
     CHECKALLOC(qvort_out,Nr*sizeof(real *));
+    CHECKALLOC(redred,Nr*sizeof(real *));
+    CHECKALLOC(redred_buf,Nr*sizeof(real *));
+    CHECKALLOC(redred_out,Nr*sizeof(real *));
     Gamma = vars;
     vec2mat(vars+1,&qvort,Nr,Na);
     dyeline = (tracer *) (vars+1+Nr*Na);
+    vec2mat(vars+1+Nr*Na+Np*sizeof(tracer),&redred,Nr,Na);
+    
     Gamma_buf = vars_buf;
     vec2mat(vars_buf+1,&qvort_buf,Nr,Na);
     dyeline_buf = (tracer *) (vars_buf+1+Nr*Na);
-    dyeline_out = (tracer *) (vars_out+1+Nr*Na);
-    vec2mat(vars_out+1,&qvort_out,Nr,Na);
-    Gamma_out = vars_out;
-    dyeline_out = (tracer *) (vars_out+1+Nr*Na);
-    RMATALLOC(psi_out,Nr,Na);
+    vec2mat(vars_buf+1+Nr*Na+Np*sizeof(tracer),&redred_buf,Nr,Na);
     
-    //Isaac
-    //Hi again Jordyn
-    //I think I need to allocate
-    //redred
-    //redred_buf
-    //redred_out
-    //
-    //above but am confused on how/where to do so and how/if to modify vars, Gamma_out, N accordingly
-    //Isaac End
+    Gamma_out = vars_out;
+    vec2mat(vars_out+1,&qvort_out,Nr,Na);
+    dyeline_out = (tracer *) (vars_out+1+Nr*Na);
+    vec2mat(vars_out+1+Nr*Na+Np*sizeof(tracer),&redred_out,Nr,Na);
+    
+    RMATALLOC(psi_out,Nr,Na);
   
     // Initial conditions
     RMATALLOC(vortInit,Nr,Na);
@@ -1198,44 +1264,48 @@ int main (int argc, char ** argv)
     RMATALLOC(dada_psiInit_r,Nr,Na);
     CMATALLOC(psiInit_s,Nr,Na);
     CMATALLOC(dada_psiInit_s,Nr,Na);
-
+    
+    CHECKALLOC(redredInit,Nr*sizeof(real *)); //do i need this Jordyn??
+    RMATALLOC(redredInit,Nr,Na);
     // Wrapper matrices for input arrays in 'tderiv' function
     CHECKALLOC(dt_qvort_r,Nr*sizeof(real *));
     CHECKALLOC(qvort_r,Nr*sizeof(real *));
-    //Isaac
-    CHECKALLOC(redred,Nr*sizeof(real *));
-    CHECKALLOC(redred_buf,Nr*sizeof(real *));
-    CHECKALLOC(redred_out,Nr*sizeof(real *));
+    
+    // Wrapper matrices for input arrays in 'tderiv' function for the dye part
     CHECKALLOC(redred_r,Nr*sizeof(real *));
     CHECKALLOC(dt_redred_r,Nr*sizeof(real *));
-    CHECKALLOC(redredInit,Nr*sizeof(real *));
     
-    RMATALLOC(redred,Nr,Na);
-    RMATALLOC(redred_buf,Nr,Na);
-    RMATALLOC(redred_out,Nr,Na);
-    RMATALLOC(redred_r,Nr,Na);
-    RMATALLOC(dt_redred_r,Nr,Na);
-    RMATALLOC(redredInit,Nr,Na);
-    //end Isaac
     // Model state variables in real and spectral space
     RMATALLOC(qvort_r,Nr,Na);
     RMATALLOC(dt_qvort_r,Nr,Na);
     RMATALLOC(vort_r,Nr,Na);
     RMATALLOC(psi_r,Nr,Na);
+    
+    RMATALLOC(redred_r,Nr,Na);
+    RMATALLOC(dt_redred_r,Nr,Na);
+    
     CMATALLOC(vort_s,Nr,Na);
     CMATALLOC(qvort_s,Nr,Na);
     CMATALLOC(psi_s,Nr,Na);
     
+    CMATALLOC(redred_s,Nr,Na);
+    
     // Work arrays for tderiv
     RMATALLOC(vq_r,Nr,Na);
     CMATALLOC(vq_s,Nr,Na);
+    RMATALLOC(vc_Red_r,Nr,Na);
+    CMATALLOC(vc_Red_s,Nr,Na);
     RMATALLOC(da_vq_r,Nr,Na);
+    RMATALLOC(da_vc_Red_r,Nr,Na);
     RMATALLOC(da_psi_r,Nr,Na);
     RMATALLOC(dr_psi_r,Nr,Na);
     CMATALLOC(da_vq_s,Nr,Na);
+    CMATALLOC(da_vc_Red_s,Nr,Na);
     CMATALLOC(da_psi_s,Nr,Na);
     RMATALLOC(dada_vort_r,Nr,Na);
     CMATALLOC(dada_vort_s,Nr,Na);
+    
+    
   
     // Matrices for streamfunction decomposition
     RMATALLOC(qvortL,Nr,Na);
@@ -1609,7 +1679,7 @@ int main (int argc, char ** argv)
     }
     
     // Write out the initial data
-    if (!writeModelState(t,n_saves,qvort,psiInit,redredInit,outdir))//Isaac modified
+    if (!writeModelState(t,n_saves,qvort,psiInit,redred,outdir))//Isaac modified
     {
         fprintf(stderr,"Unable to write model state");
         printUsage();
@@ -1653,6 +1723,7 @@ int main (int argc, char ** argv)
                     &tderiv             );
 
             memcpy(*qvort,*qvort_out,N*sizeof(real));
+            memcpy(*redred,*redred_out,N*sizeof(real));//Hey why do we only need to do this in rk4?
         }
         else if (method_t == METHOD_AB3)
         {
@@ -1705,17 +1776,25 @@ int main (int argc, char ** argv)
         {
             fftw_execute_dft_r2c(forward_transform,*qvort,*qvort_s);
 
+            fftw_execute_dft_r2c(forward_transform,*redred,*redred_s);
+            
             for (i = 0; i < Nr; i ++)
             {
                 for (j = 0; j < Na; j ++)
                 {
                     qvort_s[i][j][0] *= filter[j];
                     qvort_s[i][j][1] *= filter[j];
+                    
+                    redred_s[i][j][0] *= filter[j];
+                    redred_s[i][j][1] *= filter[j];
                 }
             }
 
             fftw_execute_dft_c2r(backward_transform,*qvort_s,*qvort);
             normalise(*qvort,Nr*Na,Na);
+            
+            fftw_execute_dft_c2r(backward_transform,*redred_s,*redred);
+            normalise(*redred,Nr*Na,Na);
         }
 
         // If the time step has taken us past a save point (or multiple
@@ -1724,12 +1803,7 @@ int main (int argc, char ** argv)
         {
             // Write out the latest model state
             calcPsi(qvort_out,*Gamma_out,psi_out);
-            //Isaac
-            //Hi Jordyn! Should I be doing something like
-            //     dyeline_buf[i].r = wc*dyeline[i].r + wn*dyeline_out[i].r;
-            //     dyeline_buf[i].a = wc*dyeline[i].a + wn*dyeline_out[i].a;
-            //Here like andrew does below but with my redred_buf?
-            //End Isaac
+            
             if (!writeModelState(t,n_saves,qvort_out,psi_out,redred_out,outdir))//Isaac Modified
             {
                 fprintf(stderr,"Unable to write model state");
