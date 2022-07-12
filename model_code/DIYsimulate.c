@@ -1112,7 +1112,7 @@ int main (int argc, char ** argv)
     setParam(params,17,"psiInitFile","%s",&psiInitFile,true);
     setParam(params,18,"tracInitFile","%s",&tracInitFile,true);
     //Isaac
-    setParam(params,19,"redInitFile","%s",&redInitFile,true);
+    setParam(params,19,"redTracInitFile","%s",&redInitFile,true);
     //Isaac End
     
     // Check that a file name has been specified
@@ -1612,17 +1612,27 @@ int main (int argc, char ** argv)
             return 0;
         }
       
-        // Ensure relative vorticity is zero on boundaries (free slip condition)
+        // Ensure relative dye concentration is zero on boundaries (free slip condition)
         // NOTE: remember that qvort is storing relative vorticity at this point in the code
         for (j = 0; j < Na; j ++)
         {
-            if ((redredInit[0][j] != 0) || (redred[Nr-1][j] != 0))
+            //enforce violently bc i cant figure out how to get it to work in matlab
+            
+            redredInit[0][j] = 0;
+            redredInit[Nr-1][j] = 0;
+            
+        }
+        for (j = 0; j < Na; j ++)
+        {
+            
+            if ((redredInit[0][j] != 0) || (redredInit[Nr-1][j] != 0))
             {
                 fprintf(stderr,"ERROR: Red Dye concentration must be zero on the boundaries\n");
                 printUsage();
                 return 0;
             }
         }
+        
         
         
         for (i = 0; i < Nr; i++)
