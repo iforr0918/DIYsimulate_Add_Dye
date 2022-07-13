@@ -18,6 +18,7 @@ function M = anim (local_home_dir,run_name,t_start,t_end, ...
 %%%                'pv' (potential vorticity)
 %%%                'psi' (streamfunction)
 %%%                'speed' (absolute flow speed)
+%%%                'red' (red dye tracer concentration) 
 %%% contours - Vector of contour levels to plot. If just an integer number
 %%%            N is specified then N arbitrary contours will be plotted.
 %%% show_tracers - If set 'true' then the passive tracer particles in the
@@ -31,6 +32,18 @@ function M = anim (local_home_dir,run_name,t_start,t_end, ...
 
   %%% Load model parameters
   loadParams;
+
+  %%% Grids  
+  da_fill = 2*pi/amult/Na;
+  rr_fill = rmin:dr:rmax;
+  aa_fill = 0:da_fill:2*pi/amult;    
+  [AA_fill,RR_fill] = meshgrid(aa_fill,rr_fill);  
+  XX_fill = RR_fill.*cos(AA_fill);
+  YY_fill = RR_fill.*sin(AA_fill);
+  h_max = max(hh, [], 'all');
+  h_min = min(hh , [], 'all');
+  levs = [h_min:(h_max-h_min)/5.0:h_max];
+  
  
   %%% Plotting options
   scrsz = get(0,'ScreenSize');
@@ -44,7 +57,8 @@ function M = anim (local_home_dir,run_name,t_start,t_end, ...
   clf;
   axes('FontSize',fontsize);
   M = moviein(Nframes);
-  
+  redmax = 0;
+
   %%% At each time iteration...
   for n=1:1:Nframes
     
@@ -58,6 +72,7 @@ function M = anim (local_home_dir,run_name,t_start,t_end, ...
     psi = [];
     vort = [];
     pv = [];
+    red = [];
     
     %%% Read tracer positions
     if (Np > 0)
@@ -164,6 +179,27 @@ function M = anim (local_home_dir,run_name,t_start,t_end, ...
       
     end
     
+    %%% Plot red dye concentration
+    if (strcmp(field,'red'))
+      
+      %%% Load potential vorticity
+      data_file = fullfile(dirpath,[OUTN_RED,'_n=',num2str(n),'.dat']);
+      red_read = readOutputFile(data_file,Nr,Na);  
+      str_match = true;
+%       contourf(XX/1000,YY/1000,vort/abs(f0),contours,'EdgeColor','None');
+      red_fill = zeros(Nr,Na+1);
+      red_fill(:, 1:end-1) = red_read;
+      red_fill(:, end) = red_fill(:,1);
+      pcolor(XX_fill,YY_fill,red_fill);
+      shading interp;
+      %redmax = max(max(red_read));
+      if (n == 1); redmax = max(max(red_read)); end;
+      caxis([0 redmax]);
+      colormap(cmocean('balance','pivot', 0));
+      title(strcat(['Red Dye Concentration at t=',num2str(t,'%3.1f'),' seconds']),'FontSize',fontsize,'Interpreter','latex');
+      
+    end
+    
     %%% Restrict colorbar limits
     if (length(contours)>1)
       caxis([min(contours),max(contours)]);
@@ -186,9 +222,10 @@ function M = anim (local_home_dir,run_name,t_start,t_end, ...
     
     %%% Plot the top and bottom of the continental slope
     if (show_topog)
-      hold on;    
-      [C,h] = contour(XX,YY,hh,[0.02:0.02:0.1],'EdgeColor','k');
-      clabel(C,h);
+      hold on; 
+      
+      [C,h] = contour(XX,YY,hh,levs,'EdgeColor','k');
+      %clabel(C,h);
       hold off;
     end
     
