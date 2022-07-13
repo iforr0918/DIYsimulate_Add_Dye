@@ -9,7 +9,7 @@
  * TODO a smagorinsky viscosity might be a good call for simulations not able to resolve the molecular viscosity
  * TODO no-slip or no-stress boundary conditions?
  * TODO add temperature variable following Warneford and Dellar 2013?
- *
+ * Add Dye Tracers - Isaac Forrest
  */
 #include <time.h>
 
@@ -17,7 +17,7 @@
 #include "ab.h"
 #include "DIYdefs.h"
 
-#define NPARAMS 19
+#define NPARAMS 20
 
 #define RMATALLOC(mat,m,n)                                      \
     mat = rmatalloc(m,n);                                       \
@@ -53,22 +53,36 @@ fftw_plan backward_transform = NULL;
 real ** qvort_r = NULL;
 real ** vort_r = NULL;
 real ** psi_r = NULL;
+real ** redred_r = NULL;
+
 complex ** qvort_s = NULL;
 complex ** vort_s = NULL;
 complex ** psi_s = NULL;
+complex ** redred_s = NULL;
 
 // Used for calculation of advective terms
 real ** vq_r = NULL;
 complex ** vq_s = NULL;
 
+real ** vc_Red_r = NULL;
+complex ** vc_Red_s = NULL;
+
+//
+
 // Real and spectral derivatives with respect to theta
 real ** da_vq_r = NULL;
+real ** da_vc_Red_r = NULL;
 real ** da_psi_r = NULL;
 real ** dr_psi_r = NULL;
 complex ** da_vq_s = NULL;
+complex ** da_vc_Red_s = NULL;
 complex ** da_psi_s = NULL;
 complex ** dada_vort_s = NULL;
+complex ** dada_redred_s = NULL;
+real ** dada_redred_r = NULL;
 real ** dada_vort_r = NULL;
+
+
 
 // Used for boundary circulation evolution
 real * u_bdy = NULL;
@@ -77,6 +91,7 @@ real * dt_Gamma_wrk = NULL;
 // Time derivative of real vorticity - for use in time
 // derivative function
 real ** dt_qvort_r = NULL;
+real ** dt_redred_r = NULL;
 
 // Coefficient arrays used in the update_psi method
 real ** psicoeffb = NULL;
@@ -152,8 +167,11 @@ const uint method_a = METHOD_FD;
 static const char OUTN_PSI[] = "PSI";
 static const char OUTN_PV[] = "PV";
 static const char OUTN_TRACER[] = "TRACER";
-static const char OUTN_TFILE[] = "time.txt";
 
+static const char OUTN_TFILE[] = "time.txt";
+//Isaac
+static const char OUTN_RED[] = "RED";
+//End Isaac
 
 
 /**
@@ -354,7 +372,13 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
     real dr_ruq = 0;
     real dada_vort = 0;
     real dada_qvort = 0;
-
+    
+    real da_vc_Red = 0;
+    real dr_ruc_Red = 0;
+    real dr_redred = 0;
+    real drdr_redred = 0;
+    real dada_redred = 0;
+    
     // Pointer to circulation data
     real * Gamma_r = 0;
     real * dt_Gamma_r = NULL;
@@ -362,7 +386,12 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
     // Pointers to tracer data
     tracer * dyeline_r = NULL;
     tracer * dt_dyeline_r = NULL;
-
+    
+    //Pointers to Red Dye data
+    // Pointer to circulation data
+    //real * Red_r = 0;
+    //real * dt_Red_r = NULL;
+    
     // Variables for tracer tendency calculation
     real rpos = 0;
     real apos = 0;
@@ -384,6 +413,9 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
     // Copy the vorticity data into the transform matrix
     memcpy(*qvort_r,vars+1,Nr*Na*sizeof(real));
   
+    // Copy the red dye data into the transform matrix
+    memcpy(*redred_r,vars+1+Nr*Na+ Np*sizeof(tracer),Nr*Na*sizeof(real));
+    
     // Make sure time derivatives are zero before we set them
     memset(dt_vars,0,numvars*sizeof(real));
     
@@ -392,8 +424,8 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
     dt_Gamma_r = (real *) dt_vars;
     dyeline_r = (tracer *) (vars + 1 + Nr*Na);
     dt_dyeline_r = (tracer *) (dt_vars + 1 + Nr*Na);
-
-
+    //Red_r = (real *) (vars + 1 + Nr*Na + Np*sizeof(tracer)) ;
+    //dt_Red_r = (real *) (dt_vars + 1 + Nr*Na + Np*sizeof(tracer));
 
     // CALCULATION OF THE STREAMFUNCTION
 
@@ -477,6 +509,14 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             vq_r[i][j] = qvort_r[i][j]*(psi_r[i+1][j]-psi_r[i-1][j])/_2dr;
         }
     }
+    for (i = 1; i < Nr-1; i ++)
+    {
+        for (j = 0; j < Na; j ++)
+        {
+            vc_Red_r[i][j] = redred_r[i][j]*(psi_r[i+1][j]-psi_r[i-1][j])/_2dr;
+        }
+    }
+    
 
     // If we're using a pseudospectral algorithm, calculate other
     // theta derivatives now
@@ -485,7 +525,11 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
         // Transform qvort_r -> qvort_s and vq_r -> vq_s
         fftw_execute_dft_r2c(forward_transform,*vq_r,*vq_s);
         fftw_execute_dft_r2c(forward_transform,*qvort_r,*qvort_s);
-
+        
+        // Transform redreds_r -> redred_s and vc_Red_r -> vc_Red_s
+        fftw_execute_dft_r2c(forward_transform,*vc_Red_r,*vc_Red_s);
+        fftw_execute_dft_r2c(forward_transform,*redred_r,*redred_s);
+        
         // Calculate theta-derivatives in spectral space:
         // da_psi_s, da_vort_s and dada_vort_s
         for (i = 0; i < Nr; i ++)
@@ -502,16 +546,38 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
                 }
             }
         }
+        
+        for (i = 0; i < Nr; i ++)
+        {
+            for (j = 0; j < Na; j ++)
+            {
+                da_vc_Red_s[i][j][0] = -amult*kk[j]*vc_Red_s[i][j][1];
+                da_vc_Red_s[i][j][1] = amult*kk[j]*vc_Red_s[i][j][0];
+
+                if (nu != 0)
+                {
+                    dada_redred_s[i][j][0] = -amultsq*kksq[j]*redred_s[i][j][0];
+                    dada_redred_s[i][j][1] = -amultsq*kksq[j]*redred_s[i][j][1];
+                }
+            }
+        }
 
         // Transform back to get da_vq_r, dada_vort_r
         fftw_execute_dft_c2r(backward_transform,*da_vq_s,*da_vq_r);
+        fftw_execute_dft_c2r(backward_transform,*da_vc_Red_s,*da_vc_Red_r);
         normalise(*da_vq_r,Nr*Na,Na);
-
+        normalise(*da_vc_Red_r,Nr*Na,Na);
+        
         if (nu != 0)
         {
             fftw_execute_dft_c2r(backward_transform,*dada_vort_s,*dada_vort_r);
             normalise(*dada_vort_r,Nr*Na,Na);
-        }        
+        }
+        if (nu != 0)
+        {
+            fftw_execute_dft_c2r(backward_transform,*dada_redred_s,*dada_redred_r);
+            normalise(*dada_redred_r,Nr*Na,Na);
+        }
     }
 
 
@@ -533,10 +599,17 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             {
                 // Theta-derivatives calculated via FFT
                 da_vq = da_vq_r[i][j];
-
+                
+                da_vc_Red = da_vc_Red_r[i][j];
+                
                 if (nu != 0)
                 {
                     dada_vort = dada_vort_r[i][j];
+                }
+                
+                if (nu != 0)
+                {
+                    dada_redred = dada_redred_r[i][j];
                 }
             }
 
@@ -545,20 +618,35 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             {
                 // Calculate theta-derivatives using second order central differencing
                 da_vq = (vq_r[i][jp1]-vq_r[i][jm1]) / _2da;
-
+                
+                da_vc_Red = (vc_Red_r[i][jp1]-vc_Red_r[i][jm1]) / _2da;
+                
                 if (nu != 0)
                 {
                     dada_vort = (vort_r[i][jp1]-2*vort_r[i][j]+vort_r[i][jm1]) / _dasq;
+                }
+                
+                if (nu != 0)
+                {
+                    dada_redred = (redred_r[i][jp1]-2*redred_r[i][j]+redred_r[i][jm1]) / _dasq;
                 }
             }
 
             // r-derivatives
             dr_ruq = (qvort_r[i-1][j]*da_psi_r[i-1][j]-qvort_r[i+1][j]*da_psi_r[i+1][j]) / _2dr;
+            
+            dr_ruc_Red = (redred_r[i-1][j]*da_psi_r[i-1][j]-redred_r[i+1][j]*da_psi_r[i+1][j]) / _2dr;
 
             if (nu != 0)
             {
                 dr_vort = (vort_r[i+1][j]-vort_r[i-1][j]) / _2dr;
                 drdr_vort = (vort_r[i+1][j]-2*vort_r[i][j]+vort_r[i-1][j]) / _drsq;
+            }
+            
+            if (nu != 0)
+            {
+                dr_redred = (redred_r[i+1][j]-redred_r[i-1][j]) / _2dr;
+                drdr_redred = (redred_r[i+1][j]-2*redred_r[i][j]+redred_r[i-1][j]) / _drsq;
             }
 
             // Calculate d(qvort)/dt
@@ -574,13 +662,29 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
                 // the discrete formulation of which is identical to that of (1/r)*(r*q_r)_r
                 dt_qvort_r[i][j] += nu*(drdr_vort+dr_vort/rr[i]+dada_vort/rrsq[i]);                
             }
+            
+            // Calculate d(c_Red)/dt
+            dt_redred_r[i][j] = - (dr_ruc_Red + da_vc_Red) / rr[i];
+
+            //if (kap0 != 0)
+            //{
+            //    dt_qvort_r[i][j] -= kap[i][j]*vort_r[i][j];
+            //}
+            if (nu != 0)
+            {
+                //NOTE: This calculation of the r-derivatives is q_rr + (1/r)q_r,
+                //the discrete formulation of which is identical to that of (1/r)*(r*q_r)_r
+                dt_redred_r[i][j] += nu*(drdr_redred+dr_redred/rr[i]+dada_redred/rrsq[i]);
+            }
         }
     }
-  
+    
+    
+    
     // Copy the calculated time derivative values into the output array
     memcpy(dt_vars+1,*dt_qvort_r,Nr*Na*sizeof(real));
-  
-  
+    memcpy(dt_vars+ 1 + Nr*Na + Np*sizeof(tracer),*dt_redred_r,Nr*Na*sizeof(real));
+    
     // BOUNDARY CIRCULATION (see Mcwilliams 1977, Stewart et al. 2014)
           
   
@@ -679,7 +783,7 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             dt_dyeline_r[p].a = dr_psi_tp / rpos;
         }
     }
-  
+
 }
 
 
@@ -692,7 +796,7 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
  * or true if the write was successful.
  *
  */
-bool writeModelState (const int t, const int n, real ** qvort, real ** psi, char * outdir)
+bool writeModelState (const int t, const int n, real ** qvort, real ** psi, real ** red_c,char * outdir)
 {
     char outfile[MAX_PARAMETER_FILENAME_LENGTH];
     char nstr[MAX_PARAMETER_FILENAME_LENGTH];
@@ -733,7 +837,29 @@ bool writeModelState (const int t, const int n, real ** qvort, real ** psi, char
     printMatrix(outfd,psi,Nr,Na);
     fclose(outfd);
     
+    //Isaac
+    
+    // Write Red Dye Concentration
+    strcpy(outfile,outdir);
+    strcat(outfile,"/");
+    strcat(outfile,OUTN_RED);
+    strcat(outfile,"_n=");
+    strcat(outfile,nstr);
+    strcat(outfile,".dat");
+    outfd = fopen(outfile,"w");
+    if (outfd == NULL)
+    {
+        fprintf(stderr,"ERROR: Could not open output file: %s\n",outfile);
+        return false;
+    }
+    printMatrix(outfd,red_c,Nr,Na);
+    fclose(outfd);
+    //End Isaac
+    
     return true;
+    
+    
+    
 }
 
 
@@ -884,14 +1010,25 @@ int main (int argc, char ** argv)
     tracer * dyeline = NULL;
     tracer * dyeline_buf = NULL;
     tracer * dyeline_out = NULL;
-  
+    
+    //Isaac
+    //For storing dye vars
+    real ** redred = NULL;
+    real ** redred_buf = NULL;
+    real ** redred_out = NULL;
+    //Isaac End
+    
     // Work arrays for reading initial conditions
     real ** vortInit = NULL;
     real ** psiInit = NULL;
     complex ** psiInit_s = NULL;
     complex ** dada_psiInit_s = NULL;
     real ** dada_psiInit_r = NULL;
-  
+    //Isaac
+    //For reading initial dye cond
+    real ** redredInit = NULL;
+    //Isaac End
+    
     // Work arrays for Runge-Kutta algorithms
     real * vars = NULL;
     real * vars_out = NULL;
@@ -945,13 +1082,18 @@ int main (int argc, char ** argv)
     char vortInitFile[MAX_PARAMETER_FILENAME_LENGTH];
     char psiInitFile[MAX_PARAMETER_FILENAME_LENGTH];
     char tracInitFile[MAX_PARAMETER_FILENAME_LENGTH];
-    
+    //Isaac
+    // Filename holders for dye input parameter arrays
+    char redInitFile[MAX_PARAMETER_FILENAME_LENGTH];
+    //Isaac End
     // Default file name parameters - zero-length strings
     bathyFile[0] = '\0';
     vortInitFile[0] = '\0';
     psiInitFile[0] = '\0';
     tracInitFile[0] = '\0';
-
+    //Isaac
+    redInitFile[0] = '\0';
+    //Isaac End
     // Define input parameter data
     setParam(params,0,"Nr","%u",&Nr,false);
     setParam(params,1,"Na","%u",&Na,false);
@@ -972,8 +1114,10 @@ int main (int argc, char ** argv)
     setParam(params,16,"vortInitFile","%s",&vortInitFile,true);
     setParam(params,17,"psiInitFile","%s",&psiInitFile,true);
     setParam(params,18,"tracInitFile","%s",&tracInitFile,true);
-  
-
+    //Isaac
+    setParam(params,19,"redTracInitFile","%s",&redInitFile,true);
+    //Isaac End
+    
     // Check that a file name has been specified
     if (argc < 3)
     {
@@ -1018,7 +1162,9 @@ int main (int argc, char ** argv)
     }
   
     // Calculate important values from the parameters
-    N = 1 + Nr*Na + Np*sizeof(tracer);
+    N = 1 + Nr*Na + Np*sizeof(tracer) + Nr*Na;
+    //N = 1 + Nr*Na + Np*sizeof(tracer);
+
     dr = (rmax-rmin)/(Nr-1);
     da = _2PI / (Na*amult);
     dt = (tmax-tmin)/(Nt-1);
@@ -1095,16 +1241,24 @@ int main (int argc, char ** argv)
     CHECKALLOC(qvort,Nr*sizeof(real *));
     CHECKALLOC(qvort_buf,Nr*sizeof(real *));
     CHECKALLOC(qvort_out,Nr*sizeof(real *));
+    CHECKALLOC(redred,Nr*sizeof(real *));
+    CHECKALLOC(redred_buf,Nr*sizeof(real *));
+    CHECKALLOC(redred_out,Nr*sizeof(real *));
     Gamma = vars;
     vec2mat(vars+1,&qvort,Nr,Na);
     dyeline = (tracer *) (vars+1+Nr*Na);
+    vec2mat(vars+1+Nr*Na+Np*sizeof(tracer),&redred,Nr,Na);
+    
     Gamma_buf = vars_buf;
     vec2mat(vars_buf+1,&qvort_buf,Nr,Na);
     dyeline_buf = (tracer *) (vars_buf+1+Nr*Na);
-    dyeline_out = (tracer *) (vars_out+1+Nr*Na);
-    vec2mat(vars_out+1,&qvort_out,Nr,Na);
+    vec2mat(vars_buf+1+Nr*Na+Np*sizeof(tracer),&redred_buf,Nr,Na);
+    
     Gamma_out = vars_out;
+    vec2mat(vars_out+1,&qvort_out,Nr,Na);
     dyeline_out = (tracer *) (vars_out+1+Nr*Na);
+    vec2mat(vars_out+1+Nr*Na+Np*sizeof(tracer),&redred_out,Nr,Na);
+    
     RMATALLOC(psi_out,Nr,Na);
   
     // Initial conditions
@@ -1113,30 +1267,49 @@ int main (int argc, char ** argv)
     RMATALLOC(dada_psiInit_r,Nr,Na);
     CMATALLOC(psiInit_s,Nr,Na);
     CMATALLOC(dada_psiInit_s,Nr,Na);
-
+    
+    CHECKALLOC(redredInit,Nr*sizeof(real *)); //do i need this Jordyn??
+    RMATALLOC(redredInit,Nr,Na);
     // Wrapper matrices for input arrays in 'tderiv' function
     CHECKALLOC(dt_qvort_r,Nr*sizeof(real *));
     CHECKALLOC(qvort_r,Nr*sizeof(real *));
-  
+    
+    // Wrapper matrices for input arrays in 'tderiv' function for the dye part
+    CHECKALLOC(redred_r,Nr*sizeof(real *));
+    CHECKALLOC(dt_redred_r,Nr*sizeof(real *));
+    
     // Model state variables in real and spectral space
     RMATALLOC(qvort_r,Nr,Na);
     RMATALLOC(dt_qvort_r,Nr,Na);
     RMATALLOC(vort_r,Nr,Na);
     RMATALLOC(psi_r,Nr,Na);
+    
+    RMATALLOC(redred_r,Nr,Na);
+    RMATALLOC(dt_redred_r,Nr,Na);
+    
     CMATALLOC(vort_s,Nr,Na);
     CMATALLOC(qvort_s,Nr,Na);
     CMATALLOC(psi_s,Nr,Na);
-
+    
+    CMATALLOC(redred_s,Nr,Na);
+    
     // Work arrays for tderiv
     RMATALLOC(vq_r,Nr,Na);
     CMATALLOC(vq_s,Nr,Na);
+    RMATALLOC(vc_Red_r,Nr,Na);
+    CMATALLOC(vc_Red_s,Nr,Na);
     RMATALLOC(da_vq_r,Nr,Na);
+    RMATALLOC(da_vc_Red_r,Nr,Na);
     RMATALLOC(da_psi_r,Nr,Na);
     RMATALLOC(dr_psi_r,Nr,Na);
     CMATALLOC(da_vq_s,Nr,Na);
+    CMATALLOC(da_vc_Red_s,Nr,Na);
     CMATALLOC(da_psi_s,Nr,Na);
     RMATALLOC(dada_vort_r,Nr,Na);
     CMATALLOC(dada_vort_s,Nr,Na);
+    RMATALLOC(dada_redred_r,Nr,Na);
+    CMATALLOC(dada_redred_s,Nr,Na);
+    
   
     // Matrices for streamfunction decomposition
     RMATALLOC(qvortL,Nr,Na);
@@ -1161,6 +1334,7 @@ int main (int argc, char ** argv)
     CHECKALLOC(kk,Na*sizeof(real));
     CHECKALLOC(kksq,Na*sizeof(real));
     RMATALLOC(hh,Nr,Na);
+
     RMATALLOC(kap,Nr,Na);
     CHECKALLOC(filter,Na*sizeof(real));
 
@@ -1262,6 +1436,29 @@ int main (int argc, char ** argv)
             }
         }
     }
+    //Isaac
+    //read red dye initial concentration
+    if (strlen(redInitFile) > 0)
+    {
+        if (!readMatrix(redInitFile,redredInit,Nr,Na,stderr))
+        {
+            fprintf(stderr,"ERROR: Could not read data from %s\n",redInitFile);
+            printUsage();
+            return 0;
+        }
+    }
+    else
+    {
+        // Default to no dye topography
+        for (i = 0; i < Nr; i ++)
+        {
+            for (j = 0; j < Na; j ++)
+            {
+                redredInit[i][j] = 0;
+            }
+        }
+    }
+    //End Isaac
 
     // Read relative vorticity initialization data and compute initial streamfunction
     if (initVort)
@@ -1420,6 +1617,50 @@ int main (int argc, char ** argv)
         }
     }
     
+    //Initial red dye concentration
+    if (strlen(redInitFile)>0)
+    {
+        if (!readMatrix(redInitFile,redredInit,Nr,Na,stderr))
+        {
+            fprintf(stderr,"ERROR: Could not read data from %s\n",redInitFile);
+            printUsage();
+            return 0;
+        }
+      
+        // Ensure relative dye concentration is zero on boundaries (free slip condition)
+        // NOTE: remember that qvort is storing relative vorticity at this point in the code
+        for (j = 0; j < Na; j ++)
+        {
+            //enforce violently bc i cant figure out how to get it to work in matlab
+            
+            redredInit[0][j] = 0;
+            redredInit[Nr-1][j] = 0;
+            
+        }
+        for (j = 0; j < Na; j ++)
+        {
+            
+            if ((redredInit[0][j] != 0) || (redredInit[Nr-1][j] != 0))
+            {
+                fprintf(stderr,"ERROR: Red Dye concentration must be zero on the boundaries\n");
+                printUsage();
+                return 0;
+            }
+        }
+        
+        
+        
+        for (i = 0; i < Nr; i++)
+        {
+            for (j = 0; j < Na; j++)
+            {
+                redred[i][j] = redredInit[i][j];
+            }
+        }
+      
+    } // end if (strlen(redInitFile)>0)
+    
+    
     //////////////////////////////////////
     ///// END READING PARAMETER DATA /////
     //////////////////////////////////////
@@ -1463,7 +1704,7 @@ int main (int argc, char ** argv)
     }
     
     // Write out the initial data
-    if (!writeModelState(t,n_saves,qvort,psiInit,outdir))
+    if (!writeModelState(t,n_saves,qvort,psiInit,redred,outdir))//Isaac modified
     {
         fprintf(stderr,"Unable to write model state");
         printUsage();
@@ -1507,6 +1748,7 @@ int main (int argc, char ** argv)
                     &tderiv             );
 
             memcpy(*qvort,*qvort_out,N*sizeof(real));
+            memcpy(*redred,*redred_out,N*sizeof(real));//Hey why do we only need to do this in rk4?
         }
         else if (method_t == METHOD_AB3)
         {
@@ -1559,17 +1801,25 @@ int main (int argc, char ** argv)
         {
             fftw_execute_dft_r2c(forward_transform,*qvort,*qvort_s);
 
+            fftw_execute_dft_r2c(forward_transform,*redred,*redred_s);
+            
             for (i = 0; i < Nr; i ++)
             {
                 for (j = 0; j < Na; j ++)
                 {
                     qvort_s[i][j][0] *= filter[j];
                     qvort_s[i][j][1] *= filter[j];
+                    
+                    redred_s[i][j][0] *= filter[j];
+                    redred_s[i][j][1] *= filter[j];
                 }
             }
 
             fftw_execute_dft_c2r(backward_transform,*qvort_s,*qvort);
             normalise(*qvort,Nr*Na,Na);
+            
+            fftw_execute_dft_c2r(backward_transform,*redred_s,*redred);
+            normalise(*redred,Nr*Na,Na);
         }
 
         // If the time step has taken us past a save point (or multiple
@@ -1578,7 +1828,8 @@ int main (int argc, char ** argv)
         {
             // Write out the latest model state
             calcPsi(qvort_out,*Gamma_out,psi_out);
-            if (!writeModelState(t,n_saves,qvort_out,psi_out,outdir))
+            
+            if (!writeModelState(t,n_saves,qvort_out,psi_out,redred_out,outdir))//Isaac Modified
             {
                 fprintf(stderr,"Unable to write model state");
                 printUsage();
