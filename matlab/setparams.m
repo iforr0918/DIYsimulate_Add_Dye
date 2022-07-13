@@ -37,21 +37,21 @@ function setparams (local_home_dir,run_name)
   amult = 1; %%% Number of subdivisions of the annulus
   rmin = 0.17/10; %%% Inner wall radius
   rmax = 0.172; %%% Outer wall radius
-  dr = 0.0025; %%% Radial grid spacing in m
+  dr = 0.001; %%% Radial grid spacing in m
 %   dr = 0.001; %%% Radial grid spacing in m
   H = 0.05; %%% Water depth in m
   Nr = ceil((rmax-rmin)/dr) + 1 %%% r-gridpoints
 %   Na = ceil(2*pi*(rmax+rmin)/2/amult/dr) %%% theta-gridpoints
   Na = ceil(2*pi*sqrt(rmax*rmin)/amult/dr) %%% theta-gridpoints
-  tmax = 180; %%% Integration time    
+  tmax = 250; %%% Integration time    
   nu = 1e-6; %%% Actual fluid viscosity  
   f = 1; %%% Background rotation rate (rad/s)      
   
   %%% Tracer parameters
 %   Ntracs_r = 30;
 %   Ntracs_a = 180;
-  Ntracs_r = 40;
-  Ntracs_a = 200;
+  Ntracs_r = 0;
+  Ntracs_a = 0;
   
   %%% Spin-down parameters
   lambdaK = 0.08; %%% Initial eddy wavelength (m)
@@ -60,7 +60,7 @@ function setparams (local_home_dir,run_name)
    E0 = 0; %%% Initial eddy energy (m^s/s^2)
   
   %%% Azimuthal flow parameters
-  zeta0 = -0.2; %%% Initial relative vorticity
+  zeta0 = -0.3; %%% Initial relative vorticity
   %zeta0 = 0; %%% Initial relative vorticity
   psi0Init = 0.25*zeta0*(rmax^2-rmin^2); %%% Initial along-channel transport (c.f. Stewart et al. 2014)
   
@@ -75,8 +75,8 @@ function setparams (local_home_dir,run_name)
 %   kappa = 0;
   
   %%% Frequency of model output in s
-  savefreq = 0.5;
-  savefreqP = 0.5;
+  savefreq = 1;
+  savefreqP = 1;
         
   %%% Grids  
   da = 2*pi/amult/Na;
@@ -161,13 +161,18 @@ function setparams (local_home_dir,run_name)
   %%% Isolated exp red splat
    X_splat = 0;
    Y_splat = -(rmax-rmin)/2;;
-   W_splat = 0.02;
-   H_splat = 0.5;
+   W_splat = 0.015;
+   H_splat = 1;
    redred = H_splat*exp(-((XX-X_splat)/W_splat).^2-((YY-Y_splat)/W_splat).^2);
+%    mesh(XX,YY,redred);
+%    shading interp;
+%    caxis([0 1]);
+%    colormap(cmocean('balance','pivot', 0));
+   mesh(XX, YY, redred)
    %enforce BC
-   redred(1,:) = 0;
-   redred(end,:) = 0;
-  
+   %redred(1,:) = 0;
+   %redred(end,:) = 0;
+   %redred([1 Nr],:) = 0;
   
   %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
   %%%%% INITIAL CONDITIONS %%%%%
@@ -265,7 +270,7 @@ function setparams (local_home_dir,run_name)
   
   %%% Red Tracer  
   redTracFile = 'redTracInitFile.dat';          
-  writeDataFile(fullfile(local_run_dir,redTracFile),redred'); 
+  writeDataFile(fullfile(local_run_dir,redTracFile),redred); 
   PARAMS = addParameter(PARAMS,'redTracInitFile',redTracFile,PARM_STR); 
 
   %%% Create the input parameter file
