@@ -37,21 +37,21 @@ function setparams (local_home_dir,run_name)
   amult = 1; %%% Number of subdivisions of the annulus
   rmin = 0.17/10; %%% Inner wall radius
   rmax = 0.172; %%% Outer wall radius
-  dr = 0.001; %%% Radial grid spacing in m
+  dr = 0.00025; %%% Radial grid spacing in m
 %   dr = 0.001; %%% Radial grid spacing in m
   H = 0.05; %%% Water depth in m
   Nr = ceil((rmax-rmin)/dr) + 1 %%% r-gridpoints
 %   Na = ceil(2*pi*(rmax+rmin)/2/amult/dr) %%% theta-gridpoints
   Na = ceil(2*pi*sqrt(rmax*rmin)/amult/dr) %%% theta-gridpoints
-  tmax = 250; %%% Integration time    
+  tmax = 200; %%% Integration time    
   nu = 1e-6; %%% Actual fluid viscosity  
-  f = 1; %%% Background rotation rate (rad/s)      
+  f = 3.15; %%% Background rotation rate (rad/s)      
   
   %%% Tracer parameters
 %   Ntracs_r = 30;
 %   Ntracs_a = 180;
-  Ntracs_r = 0;
-  Ntracs_a = 0;
+  Ntracs_r = 20;
+  Ntracs_a = 8;
   
   %%% Spin-down parameters
   lambdaK = 0.08; %%% Initial eddy wavelength (m)
@@ -60,7 +60,8 @@ function setparams (local_home_dir,run_name)
    E0 = 0; %%% Initial eddy energy (m^s/s^2)
   
   %%% Azimuthal flow parameters
-  zeta0 = -0.3; %%% Initial relative vorticity
+
+  zeta0 = 0.6; %%% Initial relative vorticity
   %zeta0 = 0; %%% Initial relative vorticity
   psi0Init = 0.25*zeta0*(rmax^2-rmin^2); %%% Initial along-channel transport (c.f. Stewart et al. 2014)
   
@@ -141,10 +142,11 @@ function setparams (local_home_dir,run_name)
 
   %%% TANH PUCK
   X_puck = 0;
-  Y_puck = (rmax -rmin)/2;
-  H_puck = H/8;
-  Rad_puck = (rmax -rmin)/8;
-  puck_slope_coef = 250;
+  Y_puck = (rmax+rmin)/2;
+  H_puck = H/4;
+  Rad_puck = (rmax-rmin)/5;
+  %Rad_puck = Rad_puck * 0.75;
+  puck_slope_coef = 500;
   d_to_puck = sqrt((XX-X_puck).^2+(YY-Y_puck).^2);
   hh = (H_puck/2)*(tanh(puck_slope_coef.*(Rad_puck - d_to_puck))+1);
   mesh(XX, YY, hh)
@@ -158,17 +160,35 @@ function setparams (local_home_dir,run_name)
   %%% Nothing
   redred = zeros(Nr,Na);
   
-  %%% Isolated exp red splat
-   X_splat = 0;
-   Y_splat = -(rmax-rmin)/2;;
-   W_splat = 0.015;
-   H_splat = 1;
-   redred = H_splat*exp(-((XX-X_splat)/W_splat).^2-((YY-Y_splat)/W_splat).^2);
+%   %%% Isolated exp red splat
+%    channel_width = rmax-rmin;
+%    N_splats = 8;
+%    splat_step = channel_width/(N_splats+1);
+%    X_splats = cat(2,zeros(1, 2 * N_splats), -linspace(rmin+splat_step,rmax-splat_step,N_splats),linspace(rmin+splat_step,rmax-splat_step,N_splats));
+%    Y_splats = cat(2,-linspace(rmin+splat_step,rmax-splat_step,N_splats),linspace(rmin+splat_step,rmax-splat_step,N_splats),zeros(1, 2 * N_splats));
+%    W_splat = 0.3*splat_step;
+%    H_splat = 1.0;
+%    splats = zeros( Nr,Na,4*N_splats);
+%    for i = 1:4*N_splats
+%        splats(:,:,i) = cat(3,H_splat*exp(-((XX-X_splats(i))/W_splat).^2-((YY-Y_splats(i))/W_splat).^2));
+%    end
+%    redred = sum(splats,3);
+%    mesh(XX, YY, redred)
+
+
+   
+   %    X_splat = 0;
+%    Y_splat = -(rmax-rmin)/2;
+%    W_splat = 0.01;
+%    H_splat = .5;
+%    redred = H_splat*exp(-((XX-X_splat)/W_splat).^2-((YY-Y_splat)/W_splat).^2);
+     
+    
 %    mesh(XX,YY,redred);
 %    shading interp;
 %    caxis([0 1]);
 %    colormap(cmocean('balance','pivot', 0));
-   mesh(XX, YY, redred)
+   %mesh(XX, YY, redred)
    %enforce BC
    %redred(1,:) = 0;
    %redred(end,:) = 0;
