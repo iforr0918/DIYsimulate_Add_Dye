@@ -194,10 +194,10 @@ function M = anim (local_home_dir,run_name,t_start,t_end, ...
       shading interp;
       %redmax = max(max(red_read));
       if (n == 1); redmax = max(max(red_read)); end;
-      caxis([0 redmax]);
+      caxis([0 1]);
       WtoR = interp1(0:1,[1 1 1 ; 1 0 0],linspace(0,1,length(colormap)));
-      %colormap(cmocean('balance','pivot', 0));
-      colormap(WtoR);
+      colormap(cmocean('balance','pivot', 0));
+      %colormap(WtoR);
       title(strcat(['Red Dye Concentration at t=',num2str(t,'%3.1f'),' seconds']),'FontSize',fontsize,'Interpreter','latex');
       
     end
