@@ -108,7 +108,8 @@ real Lr = 0;
 real La = 0;
 real f = 0.0;     // Coriolis parameter
 real H = 1.0;     // Max. water depth
-real nu = 0.0;    // Viscosity coefficient
+real nu = 0.0;// Viscosity coefficient
+real nu_rgb = 0.0;
 real ** hh = NULL; // Height of the bottom topography
 
 // To avoid repeated calculation
@@ -554,7 +555,7 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
                 da_vc_Red_s[i][j][0] = -amult*kk[j]*vc_Red_s[i][j][1];
                 da_vc_Red_s[i][j][1] = amult*kk[j]*vc_Red_s[i][j][0];
 
-                if (nu != 0)
+                if (nu_rgb != 0)
                 {
                     dada_redred_s[i][j][0] = -amultsq*kksq[j]*redred_s[i][j][0];
                     dada_redred_s[i][j][1] = -amultsq*kksq[j]*redred_s[i][j][1];
@@ -573,7 +574,7 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             fftw_execute_dft_c2r(backward_transform,*dada_vort_s,*dada_vort_r);
             normalise(*dada_vort_r,Nr*Na,Na);
         }
-        if (nu != 0)
+        if (nu_rgb != 0)
         {
             fftw_execute_dft_c2r(backward_transform,*dada_redred_s,*dada_redred_r);
             normalise(*dada_redred_r,Nr*Na,Na);
@@ -607,7 +608,7 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
                     dada_vort = dada_vort_r[i][j];
                 }
                 
-                if (nu != 0)
+                if (nu_rgb != 0)
                 {
                     dada_redred = dada_redred_r[i][j];
                 }
@@ -626,7 +627,7 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
                     dada_vort = (vort_r[i][jp1]-2*vort_r[i][j]+vort_r[i][jm1]) / _dasq;
                 }
                 
-                if (nu != 0)
+                if (nu_rgb != 0)
                 {
                     dada_redred = (redred_r[i][jp1]-2*redred_r[i][j]+redred_r[i][jm1]) / _dasq;
                 }
@@ -643,7 +644,7 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
                 drdr_vort = (vort_r[i+1][j]-2*vort_r[i][j]+vort_r[i-1][j]) / _drsq;
             }
             
-            if (nu != 0)
+            if (nu_rgb != 0)
             {
                 dr_redred = (redred_r[i+1][j]-redred_r[i-1][j]) / _2dr;
                 drdr_redred = (redred_r[i+1][j]-2*redred_r[i][j]+redred_r[i-1][j]) / _drsq;
@@ -670,11 +671,11 @@ void tderiv (const real t, const real * vars, real * dt_vars, const uint numvars
             //{
             //    dt_qvort_r[i][j] -= kap[i][j]*vort_r[i][j];
             //}
-            if (nu != 0)
+            if (nu_rgb != 0)
             {
                 //NOTE: This calculation of the r-derivatives is q_rr + (1/r)q_r,
                 //the discrete formulation of which is identical to that of (1/r)*(r*q_r)_r
-                dt_redred_r[i][j] += nu*(drdr_redred+dr_redred/rr[i]+dada_redred/rrsq[i]);
+                dt_redred_r[i][j] += nu_rgb*(drdr_redred+dr_redred/rr[i]+dada_redred/rrsq[i]);
             }
         }
     }
@@ -1352,7 +1353,7 @@ int main (int argc, char ** argv)
     /////////////////////////////
     ///// BEGIN WORK ARRAYS /////
     /////////////////////////////
-  
+    nu_rgb = nu/8;
     // Calculate r-values on gridpoints
     rr[0] = rmin;
     rrsq[0] = SQUARE(rmin);
@@ -1898,3 +1899,4 @@ int main (int argc, char ** argv)
 
     return 0;
 }
+
